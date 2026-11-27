@@ -1,0 +1,34 @@
+name: No AI attribution
+"on":
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+jobs:
+  check:
+    name: check / no-ai-attribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read the commits of the pull request
+        run: |
+          git log --format='%B' \
+            "origin/${{ github.event.pull_request.base.ref }}..${{ github.event.pull_request.head.sha }}" \
+            > messages.txt
+      - name: Read the body of the pull request
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$BODY" > body.txt
+      - name: Refuse any mention of an AI agent
+        run: |
+          pattern='(Co-[Aa]uthored-[Bb]y:.*(Claude|Copilot|Cursor|Codex|GPT|Gemini))|(Generated with \[?Claude)|(Claude-Session:)|(claude\.ai/code)|(🤖 Generated)'
+          set +e
+          grep -nEi "$pattern" messages.txt > found-messages.txt
+          grep -nEi "$pattern" body.txt > found-body.txt
+          set -e
+          if [ -s found-messages.txt ] || [ -s found-body.txt ]; then
+            echo "::error::A commit message or the pull request body credits an AI agent."
+            cat found-messages.txt found-body.txt
+            exit 1
+          fi
+          echo "No mention of an AI agent."
